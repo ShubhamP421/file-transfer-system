@@ -63,7 +63,9 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     };
 
     const result = await streamUpload();
-    const code = shortid.generate();
+
+    // --- FIX: 4 CHAR LOWERCASE CODE ---
+    const code = shortid.generate().substring(0, 4).toLowerCase();
 
     // Store mapping with public_id for deletion
     fileDB[code] = {
@@ -72,7 +74,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     };
 
     // --- AUTO-DELETE LOGIC ---
-    // Sets a timer for 2 hours (2 * 60 * 60 * 1000 ms)
     const EXPIRY_MS = 2 * 60 * 60 * 1000; 
 
     setTimeout(async () => {
