@@ -35,13 +35,12 @@ let fileDB = {};
    ROUTES
 ========================= */
 
-// Test route
 app.get("/", (req, res) => {
-  res.send("🚀 Server is running");
+  res.send("🚀 File Transfer Server is Live");
 });
 
 /* =========================
-   UPLOAD ROUTE
+   UPLOAD ROUTE (WITH AUTO-DELETE)
 ========================= */
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
@@ -59,23 +58,41 @@ app.post("/upload", upload.single("file"), async (req, res) => {
             else reject(error);
           }
         );
-
         stream.end(req.file.buffer);
       });
     };
 
     const result = await streamUpload();
-
-    // Generate unique code
     const code = shortid.generate();
 
-    // Store mapping
-    fileDB[code] = result.secure_url;
+    // Store mapping with public_id for deletion
+    fileDB[code] = {
+      url: result.secure_url,
+      public_id: result.public_id,
+    };
+
+    // --- AUTO-DELETE LOGIC ---
+    // Sets a timer for 2 hours (2 * 60 * 60 * 1000 ms)
+    const EXPIRY_MS = 2 * 60 * 60 * 1000; 
+
+    setTimeout(async () => {
+      if (fileDB[code]) {
+        try {
+          // 1. Physically delete from Cloudinary
+          await cloudinary.uploader.destroy(fileDB[code].public_id);
+          // 2. Remove from Server Memory
+          delete fileDB[code];
+          console.log(`Cleanup: Code ${code} expired and file deleted from Cloud.`);
+        } catch (err) {
+          console.error("Cleanup Error:", err);
+        }
+      }
+    }, EXPIRY_MS);
 
     res.json({
       message: "File uploaded successfully ✅",
       code: code,
-      fileUrl: result.secure_url,
+      expiresIn: "2 hours",
     });
 
   } catch (error) {
@@ -89,24 +106,21 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 ========================= */
 app.get("/file/:code", (req, res) => {
   const code = req.params.code;
+  const fileData = fileDB[code];
 
-  const fileUrl = fileDB[code];
-
-  if (!fileUrl) {
-    return res.status(404).send("File not found ❌");
+  if (!fileData) {
+    return res.status(404).send("File not found or link expired ❌");
   }
 
   res.json({
-    downloadUrl: fileUrl,
+    downloadUrl: fileData.url,
   });
-}); 
+});
 
 /* =========================
    SERVER START
 ========================= */
-
 const PORT = process.env.PORT || 5000;
-
 app.listen(PORT, () => {
-  console.log(`🔥 Server running on http://localhost:${PORT}`);
+  console.log(`🔥 Server running on port ${PORT}`);
 });
