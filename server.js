@@ -110,11 +110,14 @@ app.get("/file/:code", (req, res) => {
   const fileData = fileDB[code];
 
   if (!fileData) {
-    return res.status(404).send("File not found or link expired ❌");
+    return res.status(404).json({ error: "File not found ❌" });
   }
 
+  // This magic line transforms the URL into a download link
+  const downloadUrl = fileData.url.replace("/upload/", "/upload/fl_attachment/");
+
   res.json({
-    downloadUrl: fileData.url,
+    downloadUrl: downloadUrl,
   });
 });
 
