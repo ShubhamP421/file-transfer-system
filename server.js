@@ -80,7 +80,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       if (fileDB[code]) {
         try {
           // 1. Physically delete from Cloudinary
-          await cloudinary.uploader.destroy(fileDB[code].public_id);
+          await cloudinary.uploader.destroy(fileDB[code].public_id, {
+             resource_type: "auto",});
           // 2. Remove from Server Memory
           delete fileDB[code];
           console.log(`Cleanup: Code ${code} expired and file deleted from Cloud.`);
@@ -112,12 +113,8 @@ app.get("/file/:code", (req, res) => {
   if (!fileData) {
     return res.status(404).json({ error: "File not found ❌" });
   }
-
-  // This magic line transforms the URL into a download link
-  const downloadUrl = fileData.url.replace("/upload/", "/upload/fl_attachment/");
-
   res.json({
-    downloadUrl: downloadUrl,
+    downloadUrl: fileData.url,
   });
 });
 
