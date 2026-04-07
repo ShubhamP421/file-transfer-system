@@ -33,23 +33,27 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     }
     const originalName = req.file.originalname;
 
-    const streamUpload = () => {
-      return new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { 
-            resource_type: "auto",
-            public_id: `transfer_${shortid.generate()}`,
-            use_filename: true, 
-            filename_override: originalName 
-          },
-          (error, result) => {
-            if (result) resolve(result);
-            else reject(error);
-          }
-        );
-        stream.end(req.file.buffer);
-      });
-    };
+   const streamUpload = () => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { 
+        resource_type: "auto", 
+        flags: "attachment",  
+        use_filename: true, 
+        unique_filename: true 
+      },
+      (error, result) => {
+        if (error) {
+          console.error("Cloudinary Error Details:", error);
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      }
+    );
+    stream.end(req.file.buffer);
+  });
+};
 
     const result = await streamUpload();
     const code = shortid.generate().substring(0, 4).toLowerCase();
