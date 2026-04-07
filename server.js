@@ -11,48 +11,37 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* =========================
-   CLOUDINARY CONFIG
-========================= */
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
   api_key: process.env.API_KEY,
   api_secret: process.env.API_SECRET,
 });
 
-/* =========================
-   MULTER CONFIG
-========================= */
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-/* =========================
-   TEMP DATABASE (IN-MEMORY)
-========================= */
 let fileDB = {};
 
-/* =========================
-   ROUTES
-========================= */
-
 app.get("/", (req, res) => {
-  res.send("🚀 File Transfer Server is Live");
+  res.send("File Transfer Server is Live");
 });
 
-/* =========================
-   UPLOAD ROUTE (WITH AUTO-DELETE)
-========================= */
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).send("No file uploaded");
     }
+    const originalName = req.file.originalname;
 
-    // Upload to Cloudinary
     const streamUpload = () => {
       return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
-          { resource_type: "auto" },
+          { 
+            resource_type: "auto",
+            public_id: `transfer_${shortid.generate()}`,
+            use_filename: true, 
+            filename_override: originalName 
+          },
           (error, result) => {
             if (result) resolve(result);
             else reject(error);
@@ -63,28 +52,24 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     };
 
     const result = await streamUpload();
-
-    // --- FIX: 4 CHAR LOWERCASE CODE ---
     const code = shortid.generate().substring(0, 4).toLowerCase();
-
-    // Store mapping with public_id for deletion
     fileDB[code] = {
       url: result.secure_url,
       public_id: result.public_id,
+      resource_type: result.resource_type, 
+      original_name: originalName
     };
 
-    // --- AUTO-DELETE LOGIC ---
     const EXPIRY_MS = 2 * 60 * 60 * 1000; 
 
     setTimeout(async () => {
       if (fileDB[code]) {
         try {
-          // 1. Physically delete from Cloudinary
-          await cloudinary.uploader.destroy(fileDB[code].public_id, {
-             resource_type: "auto",});
-          // 2. Remove from Server Memory
+          await cloudinary.uploader.destroy(fileDB[code].public_id, { 
+            resource_type: fileDB[code].resource_type 
+          });
           delete fileDB[code];
-          console.log(`Cleanup: Code ${code} expired and file deleted from Cloud.`);
+          console.log(`Cleanup: Code ${code} expired.`);
         } catch (err) {
           console.error("Cleanup Error:", err);
         }
@@ -92,7 +77,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     }, EXPIRY_MS);
 
     res.json({
-      message: "File uploaded successfully ✅",
+      message: "File uploaded successfully",
       code: code,
       expiresIn: "2 hours",
     });
@@ -102,26 +87,25 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     res.status(500).send("Upload failed");
   }
 });
-
-/* =========================
-   DOWNLOAD ROUTE
-========================= */
 app.get("/file/:code", (req, res) => {
   const code = req.params.code;
   const fileData = fileDB[code];
 
   if (!fileData) {
-    return res.status(404).json({ error: "File not found ❌" });
+    return res.status(404).json({ error: "File not found" });
   }
+
+  let downloadUrl = fileData.url;
+  
+  const attachmentTag = `fl_attachment:${encodeURIComponent(fileData.original_name.split('.')[0])}/`;
+  downloadUrl = downloadUrl.replace("/upload/", `/upload/${attachmentTag}`);
+
   res.json({
-    downloadUrl: fileData.url,
+    downloadUrl: downloadUrl,
+    fileName: fileData.original_name
   });
 });
-
-/* =========================
-   SERVER START
-========================= */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🔥 Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
