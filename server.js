@@ -98,18 +98,16 @@ app.get("/file/:code", (req, res) => {
   const fileData = fileDB[req.params.code];
   if (!fileData) return res.status(404).json({ error: "File not found" });
 
-  const { url, resource_type, original_name } = fileData;
+  const { public_id, resource_type, original_name } = fileData;
 
-  // This is the magic fix:
-  // Cloudinary uses different URLs for images vs raw files.
-  // We MUST replace based on the actual resource_type returned during upload.
-  const attachmentFlag = `fl_attachment:${encodeURIComponent(original_name)}`;
-  
-  // If it's a PDF/Zip, resource_type is 'raw'. If PNG/JPG, it's 'image'.
-  const searchPattern = `/${resource_type}/upload/`;
-  const replacement = `/${resource_type}/upload/${attachmentFlag}/`;
-  
-  const downloadUrl = url.replace(searchPattern, replacement);
+  // Use the Cloudinary SDK to generate a clean download URL
+  // This ensures the resource_type and headers are perfect
+  const downloadUrl = cloudinary.url(public_id, {
+    resource_type: resource_type,
+    flags: "attachment",
+    attachment: original_name,
+    secure: true
+  });
 
   res.json({
     downloadUrl: downloadUrl,
