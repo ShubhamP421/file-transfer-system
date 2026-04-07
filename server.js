@@ -95,24 +95,17 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 
 // --- DOWNLOAD/GET ROUTE ---
 app.get("/file/:code", (req, res) => {
-  const code = req.params.code;
-  const fileData = fileDB[code];
-
-  if (!fileData) {
-    return res.status(404).json({ error: "File not found ❌" });
-  }
+  const fileData = fileDB[req.params.code];
+  if (!fileData) return res.status(404).json({ error: "File not found" });
 
   const { url, resource_type, original_name } = fileData;
 
-  /**
-   * REWRITE LOGIC:
-   * Cloudinary URLs follow: .../[resource_type]/upload/v1234/[public_id]
-   * We insert 'fl_attachment:filename' after '/upload/' to force download 
-   * with the original name.
-   */
+  // This is the magic fix:
+  // Cloudinary uses different URLs for images vs raw files.
+  // We MUST replace based on the actual resource_type returned during upload.
   const attachmentFlag = `fl_attachment:${encodeURIComponent(original_name)}`;
   
-  // We dynamically match the resource type (image, raw, or video) in the URL string
+  // If it's a PDF/Zip, resource_type is 'raw'. If PNG/JPG, it's 'image'.
   const searchPattern = `/${resource_type}/upload/`;
   const replacement = `/${resource_type}/upload/${attachmentFlag}/`;
   
@@ -120,10 +113,9 @@ app.get("/file/:code", (req, res) => {
 
   res.json({
     downloadUrl: downloadUrl,
-    fileName: original_name,
+    fileName: original_name
   });
 });
-
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🔥 Server running on port ${PORT}`);
